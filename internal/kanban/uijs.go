@@ -58,6 +58,7 @@ window.kanbanBoard = function(state) {
     boardId: state.boardId,
     isCreator: !!state.isCreator,
     columns: (state.columns || []).map(c => Object.assign({visible: true}, c)),
+    states: state.states || [],
     cards: state.cards || [],
     ticketView: state.ticketView || '',
     ticketViews: state.ticketViews || [],
@@ -76,6 +77,8 @@ window.kanbanBoard = function(state) {
     // ---- helpers ----
     cardsByState(stateId) { return this.cards.filter(c => c.state_id === stateId); },
     columnById(id) { return this.columns.find(c => c.id === id); },
+    // States not in the visible column list (hidden in config, or never added).
+    hiddenStates() { return this.states.filter(st => !this.columns.some(c => c.id === st.id)); },
 
     ageLabel(ct) {
       if (!ct) return '';
@@ -219,6 +222,11 @@ window.kanbanBoard = function(state) {
         if (!col.visible) continue;
         order += 1;
         states.push({state_id: col.id, sort_order: order});
+      }
+      for (const st of this.hiddenStates()) {
+        if (!st.visible) continue;
+        order += 1;
+        states.push({state_id: st.id, sort_order: order});
       }
       const out = await window.kanbanPost(window.kanbanBase + '/api/board/config', {board_id: this.boardId, states: states, ticket_view: this.ticketView});
       if (out && out.ok) { this.configOpen = false; location.reload(); return; }

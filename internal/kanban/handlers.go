@@ -400,6 +400,7 @@ type boardPage struct {
 	CreatorID   int64         `json:"creator_id"`
 	IsCreator   bool          `json:"is_creator"`
 	Columns     []boardColumn `json:"columns"`
+	States      []boardColumn `json:"states"` // every valid state, visible flag set
 	Cards       []boardCard   `json:"cards"`
 	TicketView  string        `json:"ticket_view"`  // saved reference or ""
 	TicketViews []ticketView  `json:"ticket_views"` // views offered by enabled plugins
@@ -508,6 +509,35 @@ func (p *Plugin) handleBoard(ctx context.Context, args json.RawMessage) (json.Ra
 		}
 	}
 
+	// States for the config dialog: every valid state with a visible flag so
+	// hidden states stay re-enableable. Visible states first (config order),
+	// hidden states after in state order.
+	allCols := make([]boardColumn, 0, len(states))
+	if len(crows) == 0 {
+		for _, s := range states {
+			allCols = append(allCols, columnFromState(s))
+		}
+	} else {
+		seen := make(map[int64]bool, len(crows))
+		for _, r := range crows {
+			sid := toInt64(r["state_id"])
+			st, ok := stateByID[sid]
+			if !ok {
+				continue
+			}
+			seen[st.ID] = true
+			allCols = append(allCols, columnFromState(st))
+		}
+		for _, st := range states {
+			if seen[st.ID] {
+				continue
+			}
+			col := columnFromState(st)
+			col.Visible = false
+			allCols = append(allCols, col)
+		}
+	}
+
 	// Card scoping mirrors the palette: admins see the whole board; everyone
 	// else only tickets from their accessible queues. A per-queue board is
 	// limited to that queue; an all-queues board to the caller's queue set
@@ -571,6 +601,7 @@ func (p *Plugin) handleBoard(ctx context.Context, args json.RawMessage) (json.Ra
 		CreatorID:   toInt64(brow["created_by"]),
 		IsCreator:   rc.IsAdmin || rc.UserID == toInt64(brow["created_by"]),
 		Columns:     columns,
+		States:      allCols,
 		Cards:       cards,
 		TicketView:  rowStr(brow["ticket_view"]),
 		TicketViews: ticketViews,

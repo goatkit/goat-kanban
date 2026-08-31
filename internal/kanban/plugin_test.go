@@ -481,6 +481,79 @@ func TestBoardPageColumnsExposeVisible(t *testing.T) {
 	}
 }
 
+// TestBoardPageStatesExposeHidden guards the config dialog: a state removed
+// from the board config must still be listed in the island's states with
+// visible:false, or it can never be re-enabled.
+func TestBoardPageStatesExposeHidden(t *testing.T) {
+	host := &fakeHost{states: []plugin.TicketStateInfo{
+		{ID: 1, Name: "new", Color: "#888", TypeName: "open"},
+		{ID: 2, Name: "open", Color: "#4a90d9", TypeName: "open"},
+		{ID: 3, Name: "closed", Color: "#444", TypeName: "closed"},
+	}}
+	host.queryFn = func(query string, args ...any) ([]map[string]any, error) {
+		q := strings.ToLower(query)
+		switch {
+		case strings.Contains(q, "from gk_kanban_board"):
+			return []map[string]any{{"id": int64(1), "name": "Everything", "queue_id": nil, "created_by": int64(6)}}, nil
+		case strings.Contains(q, "from gk_kanban_column"):
+			// only state 1 configured -> states 2 and 3 are hidden
+			return []map[string]any{{"state_id": int64(1), "sort_order": 1}}, nil
+		default:
+			return nil, nil
+		}
+	}
+	p := newTestPlugin(host, dialectMySQL)
+
+	out, err := p.Call("render_board", json.RawMessage(`{"id":1,"_user_id":6,"_is_admin":true}`))
+	if err != nil {
+		t.Fatalf("Call: %v", err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(out, &m); err != nil {
+		t.Fatalf("response is not a JSON object: %s", out)
+	}
+	page, _ := m["html"].(string)
+	start := strings.Index(page, `x-data="kanbanBoard(`)
+	if start < 0 {
+		t.Fatalf("board state island not found in page")
+	}
+	rest := page[start+len(`x-data="kanbanBoard(`):]
+	end := strings.Index(rest, `)"`)
+	if end < 0 {
+		t.Fatalf("board state island not terminated")
+	}
+	island := html.UnescapeString(rest[:end])
+	var state map[string]any
+	if err := json.Unmarshal([]byte(island), &state); err != nil {
+		t.Fatalf("island is not valid JSON: %v", err)
+	}
+
+	cols, _ := state["columns"].([]any)
+	if len(cols) != 1 {
+		t.Fatalf("columns = %v, want only the configured state", cols)
+	}
+	cid := cols[0].(map[string]any)["id"]
+	if cid != float64(1) {
+		t.Fatalf("columns[0].id = %v, want 1", cid)
+	}
+
+	all, _ := state["states"].([]any)
+	if len(all) != 3 {
+		t.Fatalf("states = %v, want all 3 valid states", state["states"])
+	}
+	vis := map[any]any{}
+	for _, c := range all {
+		cm := c.(map[string]any)
+		vis[cm["id"]] = cm["visible"]
+	}
+	if vis[float64(1)] != true {
+		t.Fatalf("state 1 visible = %v, want true", vis[float64(1)])
+	}
+	if vis[float64(2)] != false || vis[float64(3)] != false {
+		t.Fatalf("states 2/3 visible = %v/%v, want false (hidden)", vis[float64(2)], vis[float64(3)])
+	}
+}
+
 // TestBoardConfigSavesTicketView: a "plugin/ui_id" reference currently
 // declared by an enabled plugin persists via UPDATE (no raw ticket writes).
 func TestBoardConfigSavesTicketView(t *testing.T) {

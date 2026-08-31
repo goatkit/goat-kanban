@@ -78,6 +78,7 @@ select.kb-search option{background:var(--gk-bg-base);color:var(--gk-text-primary
 .kb-config-row{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13.5px;}
 .kb-config-row input[type=checkbox]{width:16px;height:16px;}
 .kb-config-row .kb-dot{margin-left:auto;}
+.kb-config-hint{margin:0 0 4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--gk-text-muted);}
 .kb-reorder{background:none;border:none;color:var(--gk-text-muted);cursor:pointer;font-size:12px;padding:0 4px;}
 .kb-reorder:hover{color:var(--gk-text-primary);}
 /* toast */
@@ -150,10 +151,15 @@ func renderBoardHTML(p *Plugin, ctx context.Context, rc reqCtx, page boardPage) 
 	for _, c := range page.Columns {
 		cols = append(cols, colJSON{ID: c.StateID, Name: c.Name, Color: c.Color, Pending: c.Pending, Visible: c.Visible})
 	}
+	stateCols := make([]colJSON, 0, len(page.States))
+	for _, c := range page.States {
+		stateCols = append(stateCols, colJSON{ID: c.StateID, Name: c.Name, Color: c.Color, Pending: c.Pending, Visible: c.Visible})
+	}
 	state := map[string]any{
 		"boardId":     page.ID,
 		"isCreator":   page.IsCreator,
 		"columns":     cols,
+		"states":      stateCols,
 		"cards":       page.Cards,
 		"ticketView":  page.TicketView,
 		"ticketViews": page.TicketViews,
@@ -167,6 +173,7 @@ func renderBoardHTML(p *Plugin, ctx context.Context, rc reqCtx, page boardPage) 
 			"cancel":        t("en", "cancel"),
 			"save":          t("en", "save"),
 			"configTitle":   t("en", "config_title"),
+			"hiddenStates":  t("en", "hidden_states"),
 			"noResults":     t("en", "no_results"),
 			"deleteConfirm": t("en", "delete_confirm"),
 			"viewLabel":     t("en", "ticket_view_label"),
@@ -261,6 +268,18 @@ func renderBoardHTML(p *Plugin, ctx context.Context, rc reqCtx, page boardPage) 
         <input type="checkbox" :id="'kc'+col.id" x-model="col.visible" />
         <label :for="'kc'+col.id" x-text="col.name"></label>
         <span class="kb-dot" :style="'background:'+(col.color||'var(--gk-text-muted)')"></span>
+      </div>
+    </template>
+    <template x-if="hiddenStates().length > 0">
+      <div style="margin-top:10px;">
+        <p class="kb-config-hint" x-text="i18n.hiddenStates"></p>
+        <template x-for="col in hiddenStates()" :key="'h'+col.id">
+          <div class="kb-config-row">
+            <input type="checkbox" :id="'kh'+col.id" x-model="col.visible" />
+            <label :for="'kh'+col.id" x-text="col.name"></label>
+            <span class="kb-dot" :style="'background:'+(col.color||'var(--gk-text-muted)')"></span>
+          </div>
+        </template>
       </div>
     </template>
     <div class="kb-pending-actions" style="margin-top:14px;">
