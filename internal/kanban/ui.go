@@ -150,10 +150,12 @@ func renderBoardHTML(p *Plugin, ctx context.Context, rc reqCtx, page boardPage) 
 		cols = append(cols, colJSON{ID: c.StateID, Name: c.Name, Color: c.Color, Pending: c.Pending, Visible: c.Visible})
 	}
 	state := map[string]any{
-		"boardId":   page.ID,
-		"isCreator": page.IsCreator,
-		"columns":   cols,
-		"cards":     page.Cards,
+		"boardId":     page.ID,
+		"isCreator":   page.IsCreator,
+		"columns":     cols,
+		"cards":       page.Cards,
+		"ticketView":  page.TicketView,
+		"ticketViews": page.TicketViews,
 		"i18n": map[string]string{
 			"addTickets":    t("en", "add_tickets"),
 			"searchPh":      t("en", "search_ph"),
@@ -166,6 +168,8 @@ func renderBoardHTML(p *Plugin, ctx context.Context, rc reqCtx, page boardPage) 
 			"configTitle":   t("en", "config_title"),
 			"noResults":     t("en", "no_results"),
 			"deleteConfirm": t("en", "delete_confirm"),
+			"viewLabel":     t("en", "ticket_view_label"),
+			"viewStandard":  t("en", "view_standard"),
 		},
 	}
 	stateJSON := mustJSON(state)
@@ -192,7 +196,7 @@ func renderBoardHTML(p *Plugin, ctx context.Context, rc reqCtx, page boardPage) 
     <div class="kb-results">
       <template x-for="r in paletteResults" :key="r.id">
         <div class="kb-result" @click="addTicket(r)">
-          <a class="kb-tn" :href="'/ticket/' + encodeURIComponent(r.tn)" @click.stop x-text="r.tn"></a>
+          <a class="kb-tn" :href="ticketURL(r)" @click.stop x-text="r.tn"></a>
           <span x-text="r.title"></span>
         </div>
       </template>
@@ -233,10 +237,22 @@ func renderBoardHTML(p *Plugin, ctx context.Context, rc reqCtx, page boardPage) 
   </div>
 </div>`)
 
-	// Column config dialog (creator/admin): hide + reorder visible columns
+	// Board config dialog (creator/admin): hide + reorder visible
+	// columns, plus the ticket view override (server-rendered options so
+	// it works even when zero plugins declare a view).
 	b.WriteString(`<div class="kb-config" x-show="configOpen" x-cloak>
   <div class="kb-config-box">
     <h3 style="margin:0 0 12px;font-size:15px;" x-text="i18n.configTitle"></h3>
+    <div class="kb-config-row">
+      <label>` + esc(t("en", "ticket_view_label")) + `</label>
+      <select class="kb-select" x-model="ticketView" style="max-width:220px;">
+        <option value="">` + esc(t("en", "view_standard")) + `</option>`)
+	for _, v := range page.TicketViews {
+		b.WriteString(`<option value="` + escAttr(v.Ref) + `">` + esc(v.Label) + `</option>
+`)
+	}
+	b.WriteString(`      </select>
+    </div>
     <template x-for="(col, ci) in columns" :key="col.id">
       <div class="kb-config-row">
         <button class="kb-reorder" @click="moveColumn(ci,-1)" title="up">&#9650;</button>
@@ -270,12 +286,12 @@ func cardHTML() string {
        :data-ticket-id="card.id"
        @dragstart="onDragStart($event, card)"
        @dragend="onDragEnd()"
-       @click="openTicket(card.tn)"
-       @keydown.enter.prevent="openTicket(card.tn)"
-       @keydown.space.prevent="openTicket(card.tn)"
+       @click="openTicket(card)"
+       @keydown.enter.prevent="openTicket(card)"
+       @keydown.space.prevent="openTicket(card)"
        @keydown="onCardKey($event, card)">
   <div class="kb-card-top">
-    <a class="kb-tn" :href="'/ticket/' + encodeURIComponent(card.tn)" @click.stop x-text="card.tn"></a>
+    <a class="kb-tn" :href="ticketURL(card)" @click.stop x-text="card.tn"></a>
     <span class="kb-age" :class="ageClass(card.create_time)" x-text="ageLabel(card.create_time)"></span>
   </div>
   <div class="kb-title-t" x-text="card.title"></div>

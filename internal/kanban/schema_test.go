@@ -72,8 +72,24 @@ func TestMigrateSchemaAppliesV1(t *testing.T) {
 			if d == dialectPostgres && createIndex != 3 {
 				t.Fatalf("postgres separate CREATE INDEX count = %d, want 3", createIndex)
 			}
-			if !f.applied[1] {
-				t.Fatal("version 1 not recorded")
+			if !f.applied[1] || !f.applied[2] {
+				t.Fatalf("applied versions = %v, want 1 and 2", f.applied)
+			}
+			var alters int
+			for _, stmt := range f.executed {
+				lower := strings.ToLower(stmt)
+				if strings.HasPrefix(lower, "alter table gk_kanban_board") && strings.Contains(lower, "ticket_view") {
+					alters++
+					if d == dialectPostgres && !strings.Contains(lower, "if not exists") {
+						t.Errorf("postgres ALTER without IF NOT EXISTS:\n%s", stmt)
+					}
+					if d == dialectMySQL && strings.Contains(lower, "if not exists") {
+						t.Errorf("mysql ALTER with IF NOT EXISTS (unsupported):\n%s", stmt)
+					}
+				}
+			}
+			if alters != 1 {
+				t.Fatalf("ticket_view ALTER count = %d, want 1", alters)
 			}
 		})
 	}
@@ -99,7 +115,7 @@ func TestMigrateSchemaIdempotent(t *testing.T) {
 		if strings.Contains(lower, "create table") && !strings.Contains(lower, "gk_kanban_schema_version") {
 			t.Errorf("idempotency violated, re-executed: %s", stmt)
 		}
-		if strings.HasPrefix(lower, "create index") || strings.HasPrefix(lower, "insert into gk_kanban_schema_version") {
+		if strings.HasPrefix(lower, "create index") || strings.HasPrefix(lower, "insert into gk_kanban_schema_version") || strings.HasPrefix(lower, "alter table") {
 			t.Errorf("idempotency violated, re-executed: %s", stmt)
 		}
 	}

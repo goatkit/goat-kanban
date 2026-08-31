@@ -59,6 +59,8 @@ window.kanbanBoard = function(state) {
     isCreator: !!state.isCreator,
     columns: (state.columns || []).map(c => Object.assign({visible: true}, c)),
     cards: state.cards || [],
+    ticketView: state.ticketView || '',
+    ticketViews: state.ticketViews || [],
     i18n: state.i18n || {},
 
     paletteOpen: false,
@@ -95,7 +97,14 @@ window.kanbanBoard = function(state) {
       return '';
     },
 
-    openTicket(tn) { window.location.href = '/ticket/' + encodeURIComponent(tn); },
+    ticketURL(card) {
+      if (this.ticketView) {
+        const v = this.ticketViews.find(v => v.ref === this.ticketView);
+        if (v) return v.url_template.replace('{ticket_id}', String(card.id));
+      }
+      return '/ticket/' + encodeURIComponent(card.tn);
+    },
+    openTicket(card) { window.location.href = this.ticketURL(card); },
 
     // ---- palette ----
     async loadPalette() {
@@ -211,7 +220,7 @@ window.kanbanBoard = function(state) {
         order += 1;
         states.push({state_id: col.id, sort_order: order});
       }
-      const out = await window.kanbanPost(window.kanbanBase + '/api/board/config', {board_id: this.boardId, states: states});
+      const out = await window.kanbanPost(window.kanbanBase + '/api/board/config', {board_id: this.boardId, states: states, ticket_view: this.ticketView});
       if (out && out.ok) { this.configOpen = false; location.reload(); return; }
       window.kanbanToast((out && out.error) || 'error', true);
     }

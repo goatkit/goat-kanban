@@ -16,7 +16,7 @@ import (
 // schemaVersion tracks the kanban schema revision. Bump when adding a
 // migration entry below. The host persists applied versions in
 // gk_kanban_schema_version.
-const schemaVersion = 1
+const schemaVersion = 2
 
 // dialect is the detected SQL dialect: "mysql" (MariaDB included) or "postgres".
 type dialect string
@@ -211,6 +211,17 @@ var migrations = map[int][]dialectTemplate{
 			)`,
 		},
 		{mysql: "", postgres: `CREATE INDEX IF NOT EXISTS idx_kanban_column_board ON gk_kanban_column (board_id)`},
+	},
+	// v2: per-board ticket view override. ticket_view stores a stable
+	// "plugin/ui_id" reference to a plugin-declared ticket view, or NULL
+	// for the standard ticket page. The platform resolves the reference
+	// to a URL at render time, so disabling the plugin degrades the link
+	// back to the standard view instead of leaving a dead URL.
+	2: {
+		{
+			mysql:    `ALTER TABLE gk_kanban_board ADD COLUMN ticket_view VARCHAR(255) NULL DEFAULT NULL`,
+			postgres: `ALTER TABLE gk_kanban_board ADD COLUMN IF NOT EXISTS ticket_view VARCHAR(255) NULL`,
+		},
 	},
 }
 

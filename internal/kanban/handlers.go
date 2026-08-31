@@ -395,12 +395,23 @@ type boardCard struct {
 
 // boardPage is the full render payload for one board.
 type boardPage struct {
-	ID        int64         `json:"id"`
-	Name      string        `json:"name"`
-	CreatorID int64         `json:"creator_id"`
-	IsCreator bool          `json:"is_creator"`
-	Columns   []boardColumn `json:"columns"`
-	Cards     []boardCard   `json:"cards"`
+	ID          int64         `json:"id"`
+	Name        string        `json:"name"`
+	CreatorID   int64         `json:"creator_id"`
+	IsCreator   bool          `json:"is_creator"`
+	Columns     []boardColumn `json:"columns"`
+	Cards       []boardCard   `json:"cards"`
+	TicketView  string        `json:"ticket_view"`  // saved reference or ""
+	TicketViews []ticketView  `json:"ticket_views"` // views offered by enabled plugins
+}
+
+// ticketView is a plugin-declared ticket view offered to a board. Ref is
+// the stable "plugin/ui_id" stored on the board row; URLTemplate holds the
+// literal {ticket_id} placeholder the platform built into the URL.
+type ticketView struct {
+	Ref         string `json:"ref"`
+	Label       string `json:"label"`
+	URLTemplate string `json:"url_template"`
 }
 
 // handleBoard renders one board: columns from gk_kanban_column (merged with
@@ -423,7 +434,7 @@ func (p *Plugin) handleBoard(ctx context.Context, args json.RawMessage) (json.Ra
 		return errorResponse(400, p.translate(ctx, rc, "err_invalid_request")), nil
 	}
 
-	brows, err := p.host.DBQuery(ctx, "SELECT id, name, queue_id, created_by FROM gk_kanban_board WHERE id = ?", boardID)
+	brows, err := p.host.DBQuery(ctx, "SELECT id, name, queue_id, created_by, ticket_view FROM gk_kanban_board WHERE id = ?", boardID)
 	if err != nil {
 		return errorResponse(500, "failed to load board"), nil
 	}
@@ -449,6 +460,22 @@ func (p *Plugin) handleBoard(ctx context.Context, args json.RawMessage) (json.Ra
 	stateByID := make(map[int64]plugin.TicketStateInfo, len(states))
 	for _, s := range states {
 		stateByID[s.ID] = s
+	}
+
+	// Ticket views declared by enabled plugins (HostAPI). Failure here
+	// degrades to the standard ticket link — the board itself must still
+	// render.
+	views, vErr := p.host.ListTicketViews(ctx)
+	if vErr != nil {
+		views = nil
+	}
+	ticketViews := make([]ticketView, 0, len(views))
+	for _, v := range views {
+		ticketViews = append(ticketViews, ticketView{
+			Ref:         v.PluginName + "/" + v.UIID,
+			Label:       v.Label,
+			URLTemplate: v.URL,
+		})
 	}
 
 	crows, err := p.host.DBQuery(ctx,
@@ -539,12 +566,14 @@ func (p *Plugin) handleBoard(ctx context.Context, args json.RawMessage) (json.Ra
 	}
 
 	page := boardPage{
-		ID:        toInt64(brow["id"]),
-		Name:      rowStr(brow["name"]),
-		CreatorID: toInt64(brow["created_by"]),
-		IsCreator: rc.IsAdmin || rc.UserID == toInt64(brow["created_by"]),
-		Columns:   columns,
-		Cards:     cards,
+		ID:          toInt64(brow["id"]),
+		Name:        rowStr(brow["name"]),
+		CreatorID:   toInt64(brow["created_by"]),
+		IsCreator:   rc.IsAdmin || rc.UserID == toInt64(brow["created_by"]),
+		Columns:     columns,
+		Cards:       cards,
+		TicketView:  rowStr(brow["ticket_view"]),
+		TicketViews: ticketViews,
 	}
 	return pageOut(page.Name+" — "+p.translate(ctx, rc, "title"), renderBoardHTML(p, ctx, rc, page))
 }
@@ -859,6 +888,31 @@ func (p *Plugin) handleBoardConfig(ctx context.Context, args json.RawMessage) (j
 	}
 	if !rc.IsAdmin && rc.UserID != toInt64(brows[0]["created_by"]) {
 		return errorResponse(403, "only the board creator or an admin can configure this board"), nil
+	}
+
+	// Ticket view override: "" (standard) or a "plugin/ui_id" reference
+	// currently declared by an enabled plugin. Rejecting unknown refs at
+	// save time keeps the row from pointing at a disabled plugin's UI.
+	ticketView, _ := body["ticket_view"].(string)
+	ticketView = strings.TrimSpace(ticketView)
+	if ticketView != "" {
+		views, err := p.host.ListTicketViews(ctx)
+		if err != nil {
+			return errorResponse(500, "failed to load ticket views"), nil
+		}
+		known := false
+		for _, v := range views {
+			if v.PluginName+"/"+v.UIID == ticketView {
+				known = true
+				break
+			}
+		}
+		if !known {
+			return errorResponse(400, "unknown ticket view"), nil
+		}
+	}
+	if _, err := p.host.DBExec(ctx, "UPDATE gk_kanban_board SET ticket_view = ? WHERE id = ?", ticketView, boardID); err != nil {
+		return errorResponse(500, "failed to update board ticket view"), nil
 	}
 
 	states, err := p.host.ListTicketStates(ctx)

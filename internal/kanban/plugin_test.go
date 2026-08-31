@@ -27,6 +27,7 @@ type fakeHost struct {
 	execFn   func(query string, args ...any) (int64, error)
 	changeFn func(ticketID, stateID, userID, untilTime int64) error
 	states   []plugin.TicketStateInfo
+	views    []plugin.TicketViewInfo
 }
 
 func (f *fakeHost) DBQuery(ctx context.Context, query string, args ...any) ([]map[string]any, error) {
@@ -57,9 +58,12 @@ func (f *fakeHost) ChangeTicketStatus(ctx context.Context, ticketID, stateID, us
 	}
 	return nil
 }
-
 func (f *fakeHost) ListTicketStates(ctx context.Context) ([]plugin.TicketStateInfo, error) {
 	return f.states, nil
+}
+
+func (f *fakeHost) ListTicketViews(ctx context.Context) ([]plugin.TicketViewInfo, error) {
+	return f.views, nil
 }
 
 // routeQuery returns canned rows for the queries the plugin issues, keyed on
@@ -474,5 +478,139 @@ func TestBoardPageColumnsExposeVisible(t *testing.T) {
 		if v, ok := cm["visible"]; !ok || v != true {
 			t.Fatalf("column %v: visible missing or not true", cm)
 		}
+	}
+}
+
+// TestBoardConfigSavesTicketView: a "plugin/ui_id" reference currently
+// declared by an enabled plugin persists via UPDATE (no raw ticket writes).
+func TestBoardConfigSavesTicketView(t *testing.T) {
+	host := &fakeHost{views: []plugin.TicketViewInfo{{
+		PluginName: "goat-coach", UIID: "coach", Label: "Coaching",
+		URL: "/ui/goat-coach_coach/ticket?ticket_id={ticket_id}",
+	}}}
+	host.queryFn = func(query string, args ...any) ([]map[string]any, error) {
+		if strings.Contains(strings.ToLower(query), "from gk_kanban_board") {
+			return []map[string]any{{"id": int64(1), "created_by": int64(7)}}, nil
+		}
+		return nil, nil
+	}
+	type execCall struct {
+		query string
+		args  []any
+	}
+	var calls []execCall
+	host.execFn = func(query string, args ...any) (int64, error) {
+		calls = append(calls, execCall{query, args})
+		return 1, nil
+	}
+	p := newTestPlugin(host, dialectMySQL)
+
+	out, err := p.Call("api_board_config", json.RawMessage(
+		`{"_user_id":7,"board_id":1,"states":[{"state_id":5,"sort_order":1}],"ticket_view":"goat-coach/coach"}`))
+	if err != nil {
+		t.Fatalf("Call: %v", err)
+	}
+	var okm map[string]any
+	if err := json.Unmarshal(out, &okm); err != nil || okm["ok"] != true {
+		t.Fatalf("response = %s, want ok:true", out)
+	}
+	found := false
+	for _, c := range calls {
+		if strings.Contains(c.query, "UPDATE gk_kanban_board SET ticket_view") &&
+			len(c.args) == 2 && c.args[0] == "goat-coach/coach" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("ticket_view UPDATE not issued: %v", calls)
+	}
+}
+
+// TestBoardConfigRejectsUnknownTicketView: saving a reference no enabled
+// plugin declares must fail with 400 before any board write happens.
+func TestBoardConfigRejectsUnknownTicketView(t *testing.T) {
+	host := &fakeHost{}
+	host.queryFn = func(query string, args ...any) ([]map[string]any, error) {
+		if strings.Contains(strings.ToLower(query), "from gk_kanban_board") {
+			return []map[string]any{{"id": int64(1), "created_by": int64(7)}}, nil
+		}
+		return nil, nil
+	}
+	p := newTestPlugin(host, dialectMySQL)
+
+	out, err := p.Call("api_board_config", json.RawMessage(
+		`{"_user_id":7,"board_id":1,"states":[],"ticket_view":"ghost/plugin"}`))
+	if err != nil {
+		t.Fatalf("Call: %v", err)
+	}
+	if got := statusOf(t, out); got != 400 {
+		t.Fatalf("status = %d, want 400 (%s)", got, out)
+	}
+	if len(host.execs) != 0 {
+		t.Fatalf("board writes issued despite invalid view: %v", host.execs)
+	}
+}
+
+// TestBoardPageExposesTicketViews: the state island carries the saved view
+// reference and the live plugin view list; the config dialog offers the
+// declared view as a server-rendered option.
+func TestBoardPageExposesTicketViews(t *testing.T) {
+	host := &fakeHost{
+		states: []plugin.TicketStateInfo{{ID: 1, Name: "new", Color: "#888", TypeName: "open"}},
+		views: []plugin.TicketViewInfo{{
+			PluginName: "goat-coach", UIID: "coach", Label: "Coaching",
+			URL: "/ui/goat-coach_coach/ticket?ticket_id={ticket_id}",
+		}},
+	}
+	host.queryFn = func(query string, args ...any) ([]map[string]any, error) {
+		q := strings.ToLower(query)
+		switch {
+		case strings.Contains(q, "from gk_kanban_board"):
+			return []map[string]any{{"id": int64(1), "name": "Everything", "queue_id": nil, "created_by": int64(6), "ticket_view": "goat-coach/coach"}}, nil
+		default:
+			return nil, nil
+		}
+	}
+	p := newTestPlugin(host, dialectMySQL)
+
+	out, err := p.Call("render_board", json.RawMessage(`{"id":1,"_user_id":6,"_is_admin":true}`))
+	if err != nil {
+		t.Fatalf("Call: %v", err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(out, &m); err != nil {
+		t.Fatalf("response is not a JSON object: %s", out)
+	}
+	page, _ := m["html"].(string)
+	if !strings.Contains(page, `value="goat-coach/coach"`) {
+		t.Fatalf("config dialog missing ticket-view option:\n%s", page)
+	}
+	if !strings.Contains(page, "Coaching") {
+		t.Fatalf("config dialog missing view label:\n%s", page)
+	}
+	start := strings.Index(page, `x-data="kanbanBoard(`)
+	if start < 0 {
+		t.Fatalf("board state island not found in page")
+	}
+	rest := page[start+len(`x-data="kanbanBoard(`):]
+	end := strings.Index(rest, `)"`)
+	if end < 0 {
+		t.Fatalf("board state island not terminated")
+	}
+	island := html.UnescapeString(rest[:end])
+	var state map[string]any
+	if err := json.Unmarshal([]byte(island), &state); err != nil {
+		t.Fatalf("island is not valid JSON: %v", err)
+	}
+	if state["ticketView"] != "goat-coach/coach" {
+		t.Fatalf("island ticketView = %v, want goat-coach/coach", state["ticketView"])
+	}
+	views, _ := state["ticketViews"].([]any)
+	if len(views) != 1 {
+		t.Fatalf("island ticketViews = %v, want 1 entry", state["ticketViews"])
+	}
+	vm, _ := views[0].(map[string]any)
+	if vm["ref"] != "goat-coach/coach" || vm["url_template"] != "/ui/goat-coach_coach/ticket?ticket_id={ticket_id}" {
+		t.Fatalf("ticketView entry = %v", vm)
 	}
 }
