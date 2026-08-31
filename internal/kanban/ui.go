@@ -27,7 +27,7 @@ const boardListCSS = `
 const boardCSS = `
 <style>
 [x-cloak]{display:none!important;}
-.kb-wrap{display:flex;flex-direction:column;height:calc(100vh - 56px - 32px);min-height:0;}
+.kb-wrap{display:flex;flex-direction:column;height:calc(100vh - 112px);min-height:0;}
 .kb-topbar{display:flex;align-items:center;gap:10px;padding-bottom:10px;flex-wrap:wrap;}
 .kb-title{font-size:16px;font-weight:700;margin-right:auto;display:flex;align-items:center;gap:8px;}
 .kb-back{color:var(--gk-text-muted);text-decoration:none;font-size:14px;}
@@ -58,6 +58,7 @@ const boardCSS = `
 .kb-palette-label{writing-mode:vertical-rl;font-size:12px;color:var(--gk-text-muted);letter-spacing:.05em;}
 .kb-palette.open .kb-palette-label{writing-mode:horizontal-tb;margin-bottom:8px;font-weight:600;}
 .kb-search{width:100%;box-sizing:border-box;padding:7px 10px;border-radius:8px;border:1px solid var(--gk-border-default);background:var(--gk-bg-base);color:var(--gk-text-primary);font-size:13px;margin-bottom:8px;}
+select.kb-search option{background:var(--gk-bg-base);color:var(--gk-text-primary);}select.kb-search:focus{outline:2px solid var(--gk-primary,#4F7CFF);outline-offset:1px;}
 .kb-results{display:flex;flex-direction:column;gap:6px;max-height:60vh;overflow-y:auto;}
 .kb-result{padding:8px 10px;border:1px solid var(--gk-border-default);border-radius:8px;background:var(--gk-bg-base);cursor:pointer;font-size:12.5px;}
 .kb-result:hover{border-color:var(--gk-primary,#4F7CFF);}
@@ -245,7 +246,7 @@ func renderBoardHTML(p *Plugin, ctx context.Context, rc reqCtx, page boardPage) 
     <h3 style="margin:0 0 12px;font-size:15px;" x-text="i18n.configTitle"></h3>
     <div class="kb-config-row">
       <label>` + esc(t("en", "ticket_view_label")) + `</label>
-      <select class="kb-select" x-model="ticketView" style="max-width:220px;">
+      <select class="kb-search" x-model="ticketView" style="max-width:220px;">
         <option value="">` + esc(t("en", "view_standard")) + `</option>`)
 	for _, v := range page.TicketViews {
 		b.WriteString(`<option value="` + escAttr(v.Ref) + `">` + esc(v.Label) + `</option>

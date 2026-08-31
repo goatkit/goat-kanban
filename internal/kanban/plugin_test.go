@@ -183,7 +183,7 @@ func TestGKRegisterContract(t *testing.T) {
 		t.Fatalf("expected exactly 1 UI, got %d", len(reg.UIs))
 	}
 	ui := reg.UIs[0]
-	if ui.ID != "board" || ui.Type != "agent_app" || ui.Shell != "minimal" {
+	if ui.ID != "board" || ui.Type != "agent_app" || ui.Shell != "standard" {
 		t.Fatalf("UI spec = %+v", ui)
 	}
 	wantRoutes := map[string]string{

@@ -44,7 +44,7 @@ func (p *Plugin) GKRegister() (*plugin.GKRegistration, error) {
 				Description: "Drag-and-drop ticket boards over real ticket states",
 				Type:        "agent_app",
 				Icon:        "fa-table-columns",
-				Shell:       "minimal",
+				Shell:       "standard",
 				Routes: []plugin.UIRouteSpec{
 					{Path: "/", Method: "GET", Handler: "render_boards"},
 					{Path: "/board/:id", Method: "GET", Handler: "render_board"},
