@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"html"
 	"strings"
 	"sync"
 	"testing"
@@ -414,5 +415,64 @@ func TestBoardListScopesByQueueAccess(t *testing.T) {
 	}
 	if !strings.Contains(string(out), "kb-page") {
 		t.Fatalf("response = %s, want the board list page", out)
+	}
+}
+
+// TestBoardPageColumnsExposeVisible guards the Alpine state island: every
+// column must carry visible:true, or the [ / ] keyboard move skips all
+// columns (undefined is falsy) and saveConfig silently drops every column.
+func TestBoardPageColumnsExposeVisible(t *testing.T) {
+	host := &fakeHost{states: []plugin.TicketStateInfo{
+		{ID: 1, Name: "new", Color: "#888", TypeName: "open"},
+		{ID: 2, Name: "closed", Color: "#444", TypeName: "closed"},
+	}}
+	host.queryFn = func(query string, args ...any) ([]map[string]any, error) {
+		q := strings.ToLower(query)
+		switch {
+		case strings.Contains(q, "from gk_kanban_board"):
+			return []map[string]any{{"id": int64(1), "name": "Everything", "queue_id": nil, "created_by": int64(6)}}, nil
+		case strings.Contains(q, "from gk_kanban_column"):
+			return nil, nil // no saved config -> every state becomes a column
+		default:
+			return nil, nil // card query: board is empty
+		}
+	}
+	p := newTestPlugin(host, dialectMySQL)
+
+	out, err := p.Call("render_board", json.RawMessage(`{"id":1,"_user_id":6,"_is_admin":true}`))
+	if err != nil {
+		t.Fatalf("Call: %v", err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(out, &m); err != nil {
+		t.Fatalf("response is not a JSON object: %s", out)
+	}
+	page, _ := m["html"].(string)
+	start := strings.Index(page, `x-data="kanbanBoard(`)
+	if start < 0 {
+		t.Fatalf("board state island not found in page")
+	}
+	rest := page[start+len(`x-data="kanbanBoard(`):]
+	end := strings.Index(rest, `)"`)
+	if end < 0 {
+		t.Fatalf("board state island not terminated")
+	}
+	island := html.UnescapeString(rest[:end])
+	var state map[string]any
+	if err := json.Unmarshal([]byte(island), &state); err != nil {
+		t.Fatalf("island is not valid JSON: %v (%s)", err, island[:200])
+	}
+	cols, _ := state["columns"].([]any)
+	if len(cols) != 2 {
+		t.Fatalf("columns = %v, want 2 entries", state["columns"])
+	}
+	for _, c := range cols {
+		cm, ok := c.(map[string]any)
+		if !ok {
+			t.Fatalf("column entry is not an object: %v", c)
+		}
+		if v, ok := cm["visible"]; !ok || v != true {
+			t.Fatalf("column %v: visible missing or not true", cm)
+		}
 	}
 }

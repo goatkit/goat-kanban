@@ -143,10 +143,11 @@ func renderBoardHTML(p *Plugin, ctx context.Context, rc reqCtx, page boardPage) 
 		Name    string `json:"name"`
 		Color   string `json:"color"`
 		Pending bool   `json:"pending"`
+		Visible bool   `json:"visible"`
 	}
 	cols := make([]colJSON, 0, len(page.Columns))
 	for _, c := range page.Columns {
-		cols = append(cols, colJSON{ID: c.StateID, Name: c.Name, Color: c.Color, Pending: c.Pending})
+		cols = append(cols, colJSON{ID: c.StateID, Name: c.Name, Color: c.Color, Pending: c.Pending, Visible: c.Visible})
 	}
 	state := map[string]any{
 		"boardId":   page.ID,

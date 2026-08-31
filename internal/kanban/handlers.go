@@ -380,6 +380,7 @@ type boardColumn struct {
 	Color     string `json:"color"`
 	TypeName  string `json:"type_name"`
 	Pending   bool   `json:"pending"`
+	Visible   bool   `json:"visible"`
 }
 
 type boardCard struct {
@@ -556,6 +557,7 @@ func columnFromState(s plugin.TicketStateInfo) boardColumn {
 		Color:    s.Color,
 		TypeName: s.TypeName,
 		Pending:  strings.HasPrefix(strings.ToLower(s.TypeName), "pending"),
+		Visible:  true,
 	}
 }
 
