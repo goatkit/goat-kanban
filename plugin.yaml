@@ -1,0 +1,18 @@
+name: goat-kanban
+version: "0.1.0"
+runtime: grpc
+binary: kanban
+description: Kanban board plugin with drag-and-drop ticket states, palette, and queue-scoped access
+author: GoatKit Team
+license: Apache-2.0
+homepage: https://github.com/goatkit/goat-kanban
+icon: https://raw.githubusercontent.com/goatkit/goat-kanban/main/icon.svg
+resources:
+  memory_mb: 256
+  call_timeout: 30s
+  init_timeout: 10s
+  shutdown_timeout: 5s
+  permissions:
+    - type: db
+      access: readwrite
+      scope: ["gk_kanban_*", "ticket", "queue", "groups", "group_user", "role_user", "roles", "group_role", "users", "customer_user", "customer_company", "ticket_priority"]

@@ -1,0 +1,9 @@
+bin/
+.gocache/
+.gomod/
+.tmp/
+.env
+.env.*
+!.env.example
+kanban
+!internal/kanban/
