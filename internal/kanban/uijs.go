@@ -18,6 +18,12 @@ window.kanbanToast = function(msg, isErr) {
   window.__kbToastT = setTimeout(() => { el.style.display = 'none'; }, 4000);
 };
 
+window.kanbanBase = (function () {
+  var p = location.pathname.replace(/\/+$/, '');
+  var i = p.indexOf('/board/');
+  return i >= 0 ? p.slice(0, i) : p;
+})();
+
 window.kanbanPost = async function(path, payload) {
   const res = await fetch(path, {
     method: 'POST',
@@ -32,14 +38,14 @@ window.kanbanCreateBoard = async function(name, queueId) {
   if (!name) { window.kanbanToast('` + jsI18n("board_name_required") + `', true); return; }
   const payload = {name: name};
   if (queueId) payload.queue_id = parseInt(queueId, 10);
-  const out = await window.kanbanPost('/api/board/create', payload);
+  const out = await window.kanbanPost(window.kanbanBase + '/api/board/create', payload);
   if (out && out.ok) { location.reload(); return; }
   window.kanbanToast((out && out.error) || '` + jsI18n("err_generic") + `', true);
 };
 
 window.kanbanDeleteBoard = function(boardId, confirmMsg) {
   if (!confirm(confirmMsg)) return;
-  window.kanbanPost('/api/board/delete', {board_id: boardId}).then(out => {
+  window.kanbanPost(window.kanbanBase + '/api/board/delete', {board_id: boardId}).then(out => {
     if (out && out.ok) location.reload();
     else window.kanbanToast((out && out.error) || '` + jsI18n("err_generic") + `', true);
   });
@@ -96,7 +102,7 @@ window.kanbanBoard = function(state) {
       const params = new URLSearchParams({board_id: this.boardId, limit: '20'});
       if (this.q) params.set('q', this.q);
       try {
-        const res = await fetch('/api/palette?' + params.toString());
+        const res = await fetch(window.kanbanBase + '/api/palette?' + params.toString());
         const out = await res.json();
         if (Array.isArray(out)) { this.paletteResults = out; }
         else { window.kanbanToast((out && out.error) || 'error', true); }
@@ -104,7 +110,7 @@ window.kanbanBoard = function(state) {
       this.paletteLoaded = true;
     },
     async addTicket(r) {
-      const out = await window.kanbanPost('/api/board/add', {board_id: this.boardId, ticket_id: r.id});
+      const out = await window.kanbanPost(window.kanbanBase + '/api/board/add', {board_id: this.boardId, ticket_id: r.id});
       if (out && out.ok) {
         this.cards.push(Object.assign({}, r));
         this.paletteResults = this.paletteResults.filter(x => x.id !== r.id);
@@ -132,7 +138,7 @@ window.kanbanBoard = function(state) {
       card.state_id = targetCol.id;
       if (untilTime) card.until_time = untilTime;
       this.announce = 'Ticket ' + card.tn + ' moved to ' + targetCol.name;
-      window.kanbanPost('/api/move', {
+      window.kanbanPost(window.kanbanBase + '/api/move', {
         board_id: this.boardId,
         ticket_id: card.id,
         state_id: targetCol.id,
@@ -141,6 +147,7 @@ window.kanbanBoard = function(state) {
         if (out && out.ok) return;
         card.state_id = prevState; // revert
         delete card.until_time;
+        this.announce = 'Move failed: ' + ((out && out.error) || 'move failed');
         window.kanbanToast((out && out.error) || 'move failed', true);
       });
     },
@@ -204,7 +211,7 @@ window.kanbanBoard = function(state) {
         order += 1;
         states.push({state_id: col.id, sort_order: order});
       }
-      const out = await window.kanbanPost('/api/board/config', {board_id: this.boardId, states: states});
+      const out = await window.kanbanPost(window.kanbanBase + '/api/board/config', {board_id: this.boardId, states: states});
       if (out && out.ok) { this.configOpen = false; location.reload(); return; }
       window.kanbanToast((out && out.error) || 'error', true);
     }

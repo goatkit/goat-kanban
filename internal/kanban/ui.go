@@ -83,7 +83,7 @@ const boardCSS = `
 .kb-toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1f2937;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;z-index:200;box-shadow:0 4px 16px rgba(0,0,0,.3);}
 .kb-toast.err{background:#b91c1c;}
 .kb-hidden{display:none!important;}
-@media (max-width:640px){.kb-col{width:85vw;min-width:0;}}
+@media (max-width:640px){.kb-col{width:85vw;min-width:85vw;max-width:none;}}
 </style>`
 
 // renderBoardListHTML builds the board list page: existing boards + create form.
@@ -103,7 +103,7 @@ func renderBoardListHTML(rc reqCtx, boards []boardRow, queues []map[string]any) 
 		if br.QueueID != nil && br.QueueName != "" {
 			scope = br.QueueName
 		}
-		fmt.Fprintf(&b, `<a class="kb-board-card" href="/board/%d">
+		fmt.Fprintf(&b, `<a class="kb-board-card" href="/ui/goat-kanban_board/board/%d">
   <span class="kb-board-name">%s</span>
   <span class="kb-chip">%s</span>
   <span class="kb-board-meta">%d · %s</span>`, br.ID, esc(br.Name), esc(scope), br.TicketCount, esc(br.CreateTime))
@@ -169,11 +169,11 @@ func renderBoardHTML(p *Plugin, ctx context.Context, rc reqCtx, page boardPage) 
 	}
 	stateJSON := mustJSON(state)
 
-	b.WriteString(`<div class="kb-wrap" x-data="kanbanBoard(` + stateJSON + `)">`)
+	b.WriteString(`<div class="kb-wrap" x-data="kanbanBoard(` + escAttr(stateJSON) + `)">`)
 
 	// Top bar
 	b.WriteString(`<div class="kb-topbar">
-  <a class="kb-back" href="/">` + esc(t("en", "back")) + `</a>
+  <a class="kb-back" href="/ui/goat-kanban_board/">` + esc(t("en", "back")) + `</a>
   <span class="kb-title">` + esc(page.Name) + `</span>`)
 	if page.IsCreator {
 		b.WriteString(`<button class="kb-btn" @click="configOpen=true">` + esc(t("en", "config")) + `</button>`)
@@ -187,11 +187,11 @@ func renderBoardHTML(p *Plugin, ctx context.Context, rc reqCtx, page boardPage) 
 	b.WriteString(`<div class="kb-palette" :class="{open:paletteOpen}" @click="if(!paletteOpen){paletteOpen=true;loadPalette()}">
   <span class="kb-palette-label">` + esc(t("en", "add_tickets")) + `</span>
   <template x-if="paletteOpen"><div x-init="$nextTick(()=>$el.querySelector('input')?.focus())">
-    <input class="kb-search" :placeholder="i18n.searchPh" x-model.debounce.300ms="q" @input="loadPalette()" />
+    <input class="kb-search" :placeholder="i18n.searchPh" x-model="q" @input.debounce.300ms="loadPalette()" />
     <div class="kb-results">
       <template x-for="r in paletteResults" :key="r.id">
         <div class="kb-result" @click="addTicket(r)">
-          <a class="kb-tn" href="/ticket/` + `{{ r.tn }}` + `" @click.stop>{{ r.tn }}</a>
+          <a class="kb-tn" :href="'/ticket/' + encodeURIComponent(r.tn)" @click.stop x-text="r.tn"></a>
           <span x-text="r.title"></span>
         </div>
       </template>
@@ -274,7 +274,7 @@ func cardHTML() string {
        @keydown.space.prevent="openTicket(card.tn)"
        @keydown="onCardKey($event, card)">
   <div class="kb-card-top">
-    <a class="kb-tn" href="/ticket/` + `{{ card.tn }}` + `" @click.stop x-text="card.tn"></a>
+    <a class="kb-tn" :href="'/ticket/' + encodeURIComponent(card.tn)" @click.stop x-text="card.tn"></a>
     <span class="kb-age" :class="ageClass(card.create_time)" x-text="ageLabel(card.create_time)"></span>
   </div>
   <div class="kb-title-t" x-text="card.title"></div>

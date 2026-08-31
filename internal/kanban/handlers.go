@@ -62,6 +62,22 @@ func argRaw(args map[string]any, key string) any {
 	return nil
 }
 
+// unwrapFirst reduces a single-element []any / []string (url.Values from the
+// router's query map) to its element.
+func unwrapFirst(v any) any {
+	switch t := v.(type) {
+	case []any:
+		if len(t) == 1 {
+			return t[0]
+		}
+	case []string:
+		if len(t) == 1 {
+			return t[0]
+		}
+	}
+	return v
+}
+
 // argString converts a raw arg to its first string value.
 func argString(args map[string]any, key string) string {
 	switch v := argRaw(args, key).(type) {
@@ -89,7 +105,7 @@ func argString(args map[string]any, key string) string {
 
 // argInt converts a raw arg to int64.
 func argInt(args map[string]any, key string) int64 {
-	switch v := argRaw(args, key).(type) {
+	switch v := unwrapFirst(argRaw(args, key)).(type) {
 	case float64:
 		return int64(v)
 	case int64:
@@ -445,7 +461,7 @@ func (p *Plugin) handleBoard(ctx context.Context, args json.RawMessage) (json.Ra
 		       COALESCE(u.login, '') AS assignee,
 		       `+p.fmtDateTime("t.create_time")+` AS create_time
 		FROM gk_kanban_ticket kt
-		JOIN ticket t ON kt.ticket_id = t.id AND t.valid_id = 1
+		JOIN ticket t ON kt.ticket_id = t.id
 		LEFT JOIN ticket_priority p ON t.ticket_priority_id = p.id
 		LEFT JOIN users u ON t.responsible_user_id = u.id
 		WHERE kt.board_id = ?
@@ -520,7 +536,6 @@ func (p *Plugin) handlePalette(ctx context.Context, args json.RawMessage) (json.
 
 	var where []string
 	var dbArgs []any
-	where = append(where, "t.valid_id = 1")
 	if v, ok := brow["queue_id"]; ok && !isNullValue(v) {
 		queueID := toInt64(v)
 		if ok, err := p.access.canAccessQueue(ctx, rc, queueID); err != nil {
@@ -560,7 +575,7 @@ func (p *Plugin) handlePalette(ctx context.Context, args json.RawMessage) (json.
 		LEFT JOIN gk_kanban_ticket kt ON kt.ticket_id = t.id AND kt.board_id = ?
 		LEFT JOIN ticket_priority p ON t.ticket_priority_id = p.id
 		LEFT JOIN users u ON t.responsible_user_id = u.id
-		WHERE kt.ticket_id IS NULL AND ` + strings.Join(where, " AND ") + `
+		WHERE kt.ticket_id IS NULL` + whereClause(where) + `
 		ORDER BY t.create_time DESC
 		LIMIT ?`
 	queryArgs := append([]any{boardID}, dbArgs...)
@@ -618,7 +633,7 @@ func (p *Plugin) handleMove(ctx context.Context, args json.RawMessage) (json.Raw
 	if err != nil || len(brows) == 0 {
 		return errorResponse(404, "board not found"), nil
 	}
-	trows, err := p.host.DBQuery(ctx, "SELECT id, queue_id FROM ticket WHERE id = ? AND valid_id = 1", ticketID)
+	trows, err := p.host.DBQuery(ctx, "SELECT id, queue_id FROM ticket WHERE id = ?", ticketID)
 	if err != nil || len(trows) == 0 {
 		return errorResponse(404, "ticket not found"), nil
 	}
@@ -860,7 +875,7 @@ func (p *Plugin) handleBoardAdd(ctx context.Context, args json.RawMessage) (json
 	if err != nil || len(brows) == 0 {
 		return errorResponse(404, "board not found"), nil
 	}
-	trows, err := p.host.DBQuery(ctx, "SELECT id, queue_id FROM ticket WHERE id = ? AND valid_id = 1", ticketID)
+	trows, err := p.host.DBQuery(ctx, "SELECT id, queue_id FROM ticket WHERE id = ?", ticketID)
 	if err != nil || len(trows) == 0 {
 		return errorResponse(404, "ticket not found"), nil
 	}
@@ -942,4 +957,11 @@ func ageLabel(createTime string) string {
 	default:
 		return fmt.Sprintf("%dd", int(d.Hours()/24))
 	}
+}
+
+func whereClause(parts []string) string {
+	if len(parts) == 0 {
+		return ""
+	}
+	return " AND " + strings.Join(parts, " AND ")
 }
