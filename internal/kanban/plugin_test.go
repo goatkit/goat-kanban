@@ -372,3 +372,47 @@ func TestMoveSuccessGoesThroughHostAPI(t *testing.T) {
 		}
 	}
 }
+
+// TestBoardListScopesByQueueAccess: a non-admin's board list query must carry
+// the access filter (queue_id IS NULL OR IN (...)) bound to exactly their
+// accessible queue ids — a per-queue board on a foreign queue must never be
+// listed to them.
+func TestBoardListScopesByQueueAccess(t *testing.T) {
+	var boardQuery string
+	var boardArgs []any
+	host := &fakeHost{}
+	host.queryFn = func(query string, args ...any) ([]map[string]any, error) {
+		q := strings.ToLower(query)
+		switch {
+		case strings.Contains(q, "from gk_kanban_board"):
+			boardQuery, boardArgs = query, args
+			return []map[string]any{
+				{"id": int64(1), "name": "Everything", "queue_id": nil, "create_time": "2026-01-01", "queue_name": "", "ticket_count": int64(2)},
+				{"id": int64(2), "name": "Coaching", "queue_id": int64(37), "create_time": "2026-01-02", "queue_name": "Coaching", "ticket_count": int64(1)},
+			}, nil
+		case strings.Contains(q, "group_user"), strings.Contains(q, "role_user"):
+			return []map[string]any{{"group_id": int64(11)}}, nil
+		case strings.Contains(q, "from queue"):
+			return []map[string]any{{"id": int64(13), "name": "CopperForge"}}, nil
+		}
+		return nil, nil
+	}
+	p := newTestPlugin(host, dialectMySQL)
+
+	out, err := p.Call("render_boards", json.RawMessage(`{"_user_id":6}`))
+	if err != nil {
+		t.Fatalf("Call: %v", err)
+	}
+	if boardQuery == "" {
+		t.Fatal("board list query was not issued")
+	}
+	if !strings.Contains(boardQuery, "b.queue_id IS NULL OR b.queue_id IN") {
+		t.Fatalf("board list query not scoped by queue access: %s", boardQuery)
+	}
+	if len(boardArgs) != 1 || toInt64(boardArgs[0]) != 13 {
+		t.Fatalf("board list args = %v, want [13] (the only accessible queue)", boardArgs)
+	}
+	if !strings.Contains(string(out), "kb-page") {
+		t.Fatalf("response = %s, want the board list page", out)
+	}
+}

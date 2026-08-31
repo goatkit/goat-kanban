@@ -295,14 +295,39 @@ func (p *Plugin) handleBoards(ctx context.Context, args json.RawMessage) (json.R
 	}
 	rc := extractReqCtx(m)
 
-	rows, err := p.host.DBQuery(ctx, `
+	// Non-admins see only all-queues boards and boards on queues they can
+	// access; queue picker options are scoped the same way.
+	var queueSet map[int64]bool
+	if !rc.IsAdmin {
+		if s, err := p.access.accessibleQueueIDs(ctx, rc.UserID); err == nil {
+			queueSet = s
+		}
+	}
+
+	boardSelect := `
 		SELECT b.id, b.name, b.queue_id, b.created_by,
-		       `+p.fmtDate("b.create_time")+` AS create_time,
+		       ` + p.fmtDate("b.create_time") + ` AS create_time,
 		       COALESCE(q.name, '') AS queue_name,
 		       (SELECT COUNT(*) FROM gk_kanban_ticket kt WHERE kt.board_id = b.id) AS ticket_count
 		FROM gk_kanban_board b
-		LEFT JOIN queue q ON b.queue_id = q.id
-		ORDER BY b.create_time DESC`)
+		LEFT JOIN queue q ON b.queue_id = q.id`
+	var where string
+	var dbArgs []any
+	switch {
+	case rc.IsAdmin:
+		where = ""
+	case len(queueSet) > 0:
+		ids := make([]int64, 0, len(queueSet))
+		for id := range queueSet {
+			ids = append(ids, id)
+		}
+		ph, phArgs := inPlaceholders(ids)
+		where = " WHERE (b.queue_id IS NULL OR b.queue_id IN (" + ph + "))"
+		dbArgs = phArgs
+	default:
+		where = " WHERE b.queue_id IS NULL"
+	}
+	rows, err := p.host.DBQuery(ctx, boardSelect+where+"\n\t\tORDER BY b.create_time DESC", dbArgs...)
 	if err != nil {
 		return errorResponse(500, "failed to load boards"), nil
 	}
@@ -328,9 +353,9 @@ func (p *Plugin) handleBoards(ctx context.Context, args json.RawMessage) (json.R
 	var queues []map[string]any
 	if rc.IsAdmin {
 		queues, _ = p.host.DBQuery(ctx, "SELECT id, name FROM queue WHERE valid_id = 1 ORDER BY name")
-	} else if set, err := p.access.accessibleQueueIDs(ctx, rc.UserID); err == nil && len(set) > 0 {
-		ids := make([]int64, 0, len(set))
-		for id := range set {
+	} else if len(queueSet) > 0 {
+		ids := make([]int64, 0, len(queueSet))
+		for id := range queueSet {
 			ids = append(ids, id)
 		}
 		ph, phArgs := inPlaceholders(ids)
@@ -455,6 +480,36 @@ func (p *Plugin) handleBoard(ctx context.Context, args json.RawMessage) (json.Ra
 		}
 	}
 
+	// Card scoping mirrors the palette: admins see the whole board; everyone
+	// else only tickets from their accessible queues. A per-queue board is
+	// limited to that queue; an all-queues board to the caller's queue set
+	// (empty set means no cards, including anonymous callers).
+	var where []string
+	var dbArgs []any
+	where = append(where, "kt.board_id = ?")
+	dbArgs = append(dbArgs, boardID)
+	if !rc.IsAdmin {
+		if boardQueueID != nil {
+			where = append(where, "t.queue_id = ?")
+			dbArgs = append(dbArgs, *boardQueueID)
+		} else {
+			set, err := p.access.accessibleQueueIDs(ctx, rc.UserID)
+			if err != nil {
+				return errorResponse(500, "failed to check access"), nil
+			}
+			if len(set) == 0 {
+				where = append(where, "1 = 0") // no queues: no cards
+			} else {
+				ids := make([]int64, 0, len(set))
+				for id := range set {
+					ids = append(ids, id)
+				}
+				ph, phArgs := inPlaceholders(ids)
+				where = append(where, "t.queue_id IN ("+ph+")")
+				dbArgs = append(dbArgs, phArgs...)
+			}
+		}
+	}
 	trows, err := p.host.DBQuery(ctx, `
 		SELECT t.id, t.tn, t.title, t.ticket_state_id,
 		       COALESCE(p.name, '') AS priority,
@@ -464,8 +519,8 @@ func (p *Plugin) handleBoard(ctx context.Context, args json.RawMessage) (json.Ra
 		JOIN ticket t ON kt.ticket_id = t.id
 		LEFT JOIN ticket_priority p ON t.ticket_priority_id = p.id
 		LEFT JOIN users u ON t.responsible_user_id = u.id
-		WHERE kt.board_id = ?
-		ORDER BY t.create_time DESC`, boardID)
+		WHERE `+strings.Join(where, " AND ")+`
+		ORDER BY t.create_time DESC`, dbArgs...)
 	if err != nil {
 		return errorResponse(500, "failed to load tickets"), nil
 	}

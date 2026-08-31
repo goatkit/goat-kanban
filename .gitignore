@@ -7,3 +7,4 @@ bin/
 !.env.example
 kanban
 !internal/kanban/
+.gopath/
