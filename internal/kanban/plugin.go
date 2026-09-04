@@ -57,6 +57,16 @@ func (p *Plugin) GKRegister() (*plugin.GKRegistration, error) {
 				},
 			},
 		},
+		MenuItems: []plugin.MenuItemSpec{
+			{
+				ID:       "kanban-board",
+				Label:    "Kanban Board",
+				Icon:     "fa-table-columns",
+				Path:     "/ui/goat-kanban_board/",
+				Location: "agent",
+				Order:    40,
+			},
+		},
 
 		I18n: &plugin.I18nSpec{
 			Namespace:    "goat-kanban",

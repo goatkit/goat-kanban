@@ -208,6 +208,14 @@ func TestGKRegisterContract(t *testing.T) {
 		}
 	}
 
+	if len(reg.MenuItems) != 1 {
+		t.Fatalf("expected 1 menu item, got %d", len(reg.MenuItems))
+	}
+	mi := reg.MenuItems[0]
+	if mi.ID != "kanban-board" || mi.Location != "agent" || mi.Path != "/ui/goat-kanban_board/" || mi.Icon == "" {
+		t.Errorf("menu item = %+v", mi)
+	}
+
 	if reg.I18n == nil || reg.I18n.Namespace != "goat-kanban" {
 		t.Fatalf("I18n spec = %+v", reg.I18n)
 	}
