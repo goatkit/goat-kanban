@@ -25,12 +25,17 @@ window.kanbanBase = (function () {
 })();
 
 window.kanbanPost = async function(path, payload) {
-  const res = await fetch(path, {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(payload || {})
-  });
-  return res.json();
+  let res;
+  try {
+    res = await fetch(path, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload || {})
+    });
+  } catch (e) {
+    return {error: 'request failed', status: 0};
+  }
+  try { return await res.json(); } catch (e) { return {error: 'invalid response', status: res.status}; }
 };
 
 window.kanbanCreateBoard = async function(name, queueId) {
