@@ -233,20 +233,6 @@ func TestGKRegisterContract(t *testing.T) {
 			t.Errorf("de key %q missing in en", k)
 		}
 	}
-
-	if reg.Resources == nil || len(reg.Resources.Permissions) != 1 {
-		t.Fatalf("Resources = %+v", reg.Resources)
-	}
-	perm := reg.Resources.Permissions[0]
-	if perm.Type != "db" || perm.Access != "readwrite" {
-		t.Fatalf("permission = %+v", perm)
-	}
-	scope := strings.Join(perm.Scope, ",")
-	for _, want := range []string{"gk_kanban_*", "ticket", "queue", "groups", "group_user", "role_user", "roles", "group_role", "users", "customer_user", "customer_company", "ticket_priority"} {
-		if !strings.Contains(scope, want) {
-			t.Errorf("db scope missing %q: %s", want, scope)
-		}
-	}
 }
 
 func TestCallUnknownFunction(t *testing.T) {

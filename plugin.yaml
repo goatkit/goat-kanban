@@ -15,4 +15,9 @@ resources:
   permissions:
     - type: db
       access: readwrite
-      scope: ["gk_kanban_*", "ticket", "queue", "groups", "group_user", "role_user", "roles", "group_role", "users", "customer_user", "customer_company", "ticket_priority"]
+      scope: ["gk_kanban_*"]
+    - type: db
+      access: read
+      scope: ["ticket", "ticket_priority", "queue", "groups", "group_user", "role_user", "roles", "group_role", "users", "gk_organisation"]
+    - type: ticket
+      access: readwrite

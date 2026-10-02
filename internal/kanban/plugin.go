@@ -81,16 +81,19 @@ func (p *Plugin) GKRegister() (*plugin.GKRegistration, error) {
 			{Code: "invalid_request", Message: "Invalid request", HTTPStatus: 400},
 		},
 
-		// Must mirror plugin.yaml resources.permissions. The sandbox enforces
-		// the FIRST db entry's scope per query; states come from the HostAPI
-		// ListTicketStates method, not raw SQL, so no ticket_state* tables.
+		// Must mirror plugin.yaml resources.permissions. Raw SQL writes only
+		// gk_kanban_* (incl. migrations); core tables are read-only. Ticket
+		// state changes, states and views go through the ticket HostAPI.
+		// gk_organisation is read by the dialect probe in detectDialect.
 		Resources: &plugin.ResourceRequest{
 			MemoryMB:        256,
 			CallTimeout:     "30s",
 			InitTimeout:     "10s",
 			ShutdownTimeout: "5s",
 			Permissions: []plugin.Permission{
-				{Type: "db", Access: "readwrite", Scope: []string{"gk_kanban_*", "ticket", "queue", "groups", "group_user", "role_user", "roles", "group_role", "users", "customer_user", "customer_company", "ticket_priority"}},
+				{Type: "db", Access: "readwrite", Scope: []string{"gk_kanban_*"}},
+				{Type: "db", Access: "read", Scope: []string{"ticket", "ticket_priority", "queue", "groups", "group_user", "role_user", "roles", "group_role", "users", "gk_organisation"}},
+				{Type: "ticket", Access: "readwrite"},
 			},
 		},
 	}, nil
