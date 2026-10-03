@@ -37,6 +37,8 @@ func (p *Plugin) GKRegister() (*plugin.GKRegistration, error) {
 		Homepage:    "https://github.com/goatkit/goat-kanban",
 		Icon:        "https://raw.githubusercontent.com/goatkit/goat-kanban/main/icon.svg",
 
+		MinHostVersion: "0.10.0",
+
 		UIs: []plugin.UISpec{
 			{
 				ID:          "board",
