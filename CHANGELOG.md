@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-30
+
+Requires GoatFlow 0.10.0 or later.
+
+### Added
+- **Release packages carry SLSA build provenance.** The release workflow attests `goat-kanban.zip`
+  with GitHub's `attest-build-provenance` (SLSA v1.0 Build Level 2), alongside the existing ed25519
+  signature. Check it with `gh attestation verify goat-kanban.zip --repo goatkit/goat-kanban`.
+
 ## [0.1.0] - 2026-10-03
 
 First public release. Requires GoatFlow 0.10.0 or later.
