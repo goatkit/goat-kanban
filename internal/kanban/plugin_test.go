@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"html"
+	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -154,6 +156,9 @@ func (f *fakeHost) GenerateThumbnail(ctx context.Context, data []byte, contentTy
 func (f *fakeHost) CreateArticleAttachment(ctx context.Context, articleID, createdBy int64, filename, contentType string, content []byte) (int64, error) {
 	return 0, nil
 }
+func (f *fakeHost) ReadArticleAttachment(ctx context.Context, articleID, fileID int64) (plugin.ArticleAttachment, []byte, error) {
+	return plugin.ArticleAttachment{}, nil, nil
+}
 func (f *fakeHost) ListArticleAttachments(ctx context.Context, articleID int64) ([]plugin.ArticleAttachment, error) {
 	return nil, nil
 }
@@ -175,8 +180,16 @@ func TestGKRegisterContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GKRegister: %v", err)
 	}
-	if reg.Name != "goat-kanban" || reg.Version != "0.1.0" {
-		t.Fatalf("identity = %s %s, want goat-kanban 0.1.0", reg.Name, reg.Version)
+	manifest, err := os.ReadFile("../../plugin.yaml")
+	if err != nil {
+		t.Fatalf("read plugin.yaml: %v", err)
+	}
+	wantVersion := regexp.MustCompile(`(?m)^version:\s*"?([^"\s]+)"?`).FindStringSubmatch(string(manifest))
+	if wantVersion == nil {
+		t.Fatal("plugin.yaml has no version")
+	}
+	if reg.Name != "goat-kanban" || reg.Version != wantVersion[1] {
+		t.Fatalf("identity = %s %s, want goat-kanban %s (plugin.yaml)", reg.Name, reg.Version, wantVersion[1])
 	}
 
 	if len(reg.UIs) != 1 {
