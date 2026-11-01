@@ -1,5 +1,5 @@
 name: goat-kanban
-version: "0.1.1"
+version: "0.1.2"
 runtime: grpc
 binary: kanban
 description: Kanban board plugin with drag-and-drop ticket states, palette, and queue-scoped access

@@ -30,7 +30,7 @@ func New() *Plugin {
 func (p *Plugin) GKRegister() (*plugin.GKRegistration, error) {
 	return &plugin.GKRegistration{
 		Name:        "goat-kanban",
-		Version:     "0.1.1",
+		Version:         "0.1.2",
 		Description: "Kanban boards over ticket states with drag-and-drop, palette, and queue-scoped access",
 		Author:      "GoatKit Team",
 		License:     "Apache-2.0",
