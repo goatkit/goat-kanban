@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- **Builds with Go 1.26.10 against GoatFlow 0.11.0.** `go.mod` and `go.sum` follow GoatFlow
+  0.11.0's dependencies (the old `go.sum` fails a release build), and `make build` uses
+  `golang:1.26.10-alpine`.
+
 ## [0.1.2] - 2026-11-01
 
 Requires GoatFlow 0.10.0 or later.

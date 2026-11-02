@@ -13,7 +13,7 @@ RAW_VERSION := $(shell sed -n "s/^version:[ ]*//p" plugin.yaml | head -n 1 | tr 
 VERSION := $(if $(RAW_VERSION),$(RAW_VERSION),dev)
 LDFLAGS := -s -w -X main.Version=$(VERSION)
 GOATFLOW_URL ?= http://localhost:8080
-GO_IMAGE ?= golang:1.25.12-alpine
+GO_IMAGE ?= golang:1.26.10-alpine
 
 build:
 	@echo "Building $(PLUGIN_BINARY) $(VERSION)..."
